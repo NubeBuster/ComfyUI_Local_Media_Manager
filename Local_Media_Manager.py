@@ -952,6 +952,35 @@ def _check_has_workflow(filepath, mtime, item_type):
         return has_wf
     return None
 
+def _get_media_info(full_path, item_type):
+    """Extract media metadata (dimensions, fps, duration) without decoding frames."""
+    try:
+        if item_type == 'video':
+            cap = cv2.VideoCapture(full_path)
+            if not cap.isOpened():
+                return None
+            try:
+                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                fps = cap.get(cv2.CAP_PROP_FPS)
+                total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                info = {'width': w, 'height': h}
+                if fps and fps > 0:
+                    info['fps'] = round(fps, 2)
+                    if total > 0:
+                        info['total_frames'] = total
+                        info['duration'] = round(total / fps, 2)
+                return info
+            finally:
+                cap.release()
+        elif item_type == 'image':
+            with Image.open(full_path) as img:
+                w, h = img.size
+            return {'width': w, 'height': h}
+    except Exception:
+        pass
+    return None
+
 def _build_item(full_path, fname, stats, item_type, meta=None, metadata_store=None):
     """Build a media item dict. Provide either meta= directly or metadata_store= to look up by path."""
     if meta is None:
@@ -978,6 +1007,10 @@ def _build_item(full_path, fname, stats, item_type, meta=None, metadata_store=No
     has_wf = _check_has_workflow(full_path, stats.st_mtime, item_type)
     if has_wf is not None:
         item['has_workflow'] = has_wf
+    if item_type in ('image', 'video'):
+        media_info = _get_media_info(full_path, item_type)
+        if media_info:
+            item['media_info'] = media_info
     return item
 
 def _scan_directory(directory):

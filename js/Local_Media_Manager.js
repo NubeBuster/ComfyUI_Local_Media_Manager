@@ -1537,7 +1537,21 @@ app.registerExtension({
                     const d = new Date(item.mtime * 1000);
                     const pad = (n) => String(n).padStart(2, '0');
                     const mtimeStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-                    card.title = `Name: ${item.name}\nPath: ${dir}\nType: ${item.type}\nLast Edited: ${mtimeStr}`;
+                    let tooltip = `Name: ${item.name}\nPath: ${dir}\nType: ${item.type}\nLast Edited: ${mtimeStr}`;
+                    if (item.media_info) {
+                        const mi = item.media_info;
+                        if (mi.width && mi.height) tooltip += `\nDimensions: ${mi.width}x${mi.height}`;
+                        if (mi.fps) tooltip += `\nFPS: ${mi.fps}`;
+                        if (mi.total_frames) tooltip += `\nFrames: ${mi.total_frames}`;
+                        if (mi.duration != null) {
+                            const s = Math.round(mi.duration);
+                            const h = Math.floor(s / 3600);
+                            const m = Math.floor((s % 3600) / 60);
+                            const sec = s % 60;
+                            tooltip += `\nDuration: ${h > 0 ? `${h}:${String(m).padStart(2,'0')}` : String(m)}:${String(sec).padStart(2,'0')}`;
+                        }
+                    }
+                    card.title = tooltip;
 
                     let mediaHTML = "";
                     if (item.type === 'dir') {
