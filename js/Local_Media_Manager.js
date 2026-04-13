@@ -2669,6 +2669,8 @@ app.registerExtension({
                                 lastKnownPath = state.last_path;
                             }
 
+                            // Persist state to properties so subsequent copies carry it
+                            saveCurrentControlsState();
                             switchToBreadcrumb(false);
                             resetAndReload(false);
                         }
