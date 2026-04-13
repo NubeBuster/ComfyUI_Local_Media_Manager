@@ -711,7 +711,7 @@ app.registerExtension({
                                 <button class="lmm-add-path-button" title="Add current path to presets">➕</button>
                                 <button class="lmm-remove-path-button" title="Remove selected preset">➖</button>
                             </div>
-                            <button class="lmm-refresh-button">🔄 Refresh</button>
+                            <button class="lmm-refresh-button" title="Force rescan of the current directory, bypassing cache. Use when files were added or removed outside the manager.">🔄 Refresh</button>
                         </div>
                         <div class="lmm-controls" style="gap: 5px;">
                             <label>Search:</label>
@@ -1237,7 +1237,7 @@ app.registerExtension({
                     const currentPath = pathInput.value.trim();
                     if (forceReload && lastKnownPath !== currentPath) {
                         lastKnownPath = currentPath;
-                        saveStateAndReload(true);
+                        saveStateAndReload(false);
                     } else {
                         renderBreadcrumb(currentPath);
                     }
@@ -1320,7 +1320,7 @@ app.registerExtension({
                         if (item.type === 'image' || item.type === 'video') {
                             imagePartHeight = Math.max(imagePartHeight, 100);
 
-                            const tags = item.tags.map(t => `<span class="lmm-tag">${t}</span>`).join('');
+                            const tags = item.tags.map(t => `<span class="lmm-tag" title="Click to filter by this tag">${t}</span>`).join('');
                             const workflowTextBadge = item.has_workflow ? `<div class="lmm-workflow-text-badge">Workflow</div>` : '';
                             const stars = Array.from({ length: 5 }, (_, i) => `<span class="lmm-star">☆</span>`).join('');
 
@@ -1493,7 +1493,7 @@ app.registerExtension({
                     if (!tagListEl) return;
 
                     const tags = card.dataset.tags ? card.dataset.tags.split(',').filter(Boolean) : [];
-                    tagListEl.innerHTML = tags.map(t => `<span class="lmm-tag">${t}</span>`).join('');
+                    tagListEl.innerHTML = tags.map(t => `<span class="lmm-tag" title="Click to filter by this tag">${t}</span>`).join('');
                 }
 
                 function renderSelectionBadges() {
@@ -1618,7 +1618,7 @@ app.registerExtension({
                         const infoPanel = document.createElement("div");
                         infoPanel.className = 'lmm-card-info-panel';
                         const stars = Array.from({ length: 5 }, (_, i) => `<span class="lmm-star" data-value="${i + 1}">☆</span>`).join('');
-                        const tags = item.tags.map(t => `<span class="lmm-tag">${t}</span>`).join('');
+                        const tags = item.tags.map(t => `<span class="lmm-tag" title="Click to filter by this tag">${t}</span>`).join('');
 
                         const workflowTextBadge = item.has_workflow ? `<div class="lmm-workflow-text-badge" title="Click to load workflow">Workflow</div>` : '';
 
@@ -1982,9 +1982,10 @@ app.registerExtension({
                         event.stopPropagation();
                         tagFilterInput.value = event.target.textContent;
                         lastFilteredTags = tagFilterInput.value.trim();
+                        syncTagDropdownToInput();
                         ['current', 'input', 'output', 'saved'].forEach(s => activeScopes.add(s));
                         updateScopeDisplay();
-                        resetAndReload(true);
+                        resetAndReload(false);
                         return;
                     }
 
@@ -1996,7 +1997,7 @@ app.registerExtension({
                         delete searchInput.dataset.savedValue;
                         lastSearchedQuery = '';
                         tagFilterInput.value = "";
-                        resetAndReload(true);
+                        resetAndReload(false);
                         pathPresets.selectedIndex = 0;
                         return;
                     }
@@ -2129,6 +2130,19 @@ app.registerExtension({
                     else if (e.key === 'Escape') { e.preventDefault(); closeLightbox(); }
                 });
 
+                const syncTagDropdownToInput = () => {
+                    const inputTags = new Set(tagFilterInput.value.split(',').map(t => t.trim().toLowerCase()).filter(Boolean));
+                    const checkboxes = multiSelectTagDropdown.querySelectorAll('input[type="checkbox"]:not(.lmm-select-all)');
+                    checkboxes.forEach(cb => { cb.checked = inputTags.has(cb.value.toLowerCase()); });
+                    const tagAllCb = multiSelectTagDropdown.querySelector('.lmm-select-all');
+                    if (tagAllCb) {
+                        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                        const noneChecked = Array.from(checkboxes).every(cb => !cb.checked);
+                        tagAllCb.checked = allChecked;
+                        tagAllCb.indeterminate = !allChecked && !noneChecked;
+                    }
+                };
+
                 const saveCurrentControlsState = () => {
                     const sortBy = controls.querySelector(".lmm-sort-by");
                     const sortOrder = controls.querySelector(".lmm-sort-order");
@@ -2185,6 +2199,7 @@ app.registerExtension({
                         const t = tagFilterInput.value.trim();
                         if (t !== lastFilteredTags) {
                             lastFilteredTags = t;
+                            syncTagDropdownToInput();
                             saveStateAndReload(false);
                         }
                     }, 1000);
@@ -2194,6 +2209,7 @@ app.registerExtension({
                     const t = tagFilterInput.value.trim();
                     if (t !== lastFilteredTags) {
                         lastFilteredTags = t;
+                        syncTagDropdownToInput();
                         saveStateAndReload(false);
                     }
                 });
@@ -2201,6 +2217,7 @@ app.registerExtension({
                     if (e.key === 'Enter') {
                         clearTimeout(tagFilterDebounceTimer);
                         lastFilteredTags = tagFilterInput.value.trim();
+                        syncTagDropdownToInput();
                         saveStateAndReload(false);
                     } else if (e.key === 'Escape' && tagFilterInput.value) {
                         e.preventDefault();
@@ -2362,7 +2379,7 @@ app.registerExtension({
                     if (pathPresets.value) {
                         pathInput.value = pathPresets.value;
                         lastKnownPath = pathInput.value;
-                        saveStateAndReload(true);
+                        saveStateAndReload(false);
                     }
                 });
 
@@ -2391,7 +2408,7 @@ app.registerExtension({
                         delete searchInput.dataset.savedValue;
                         lastSearchedQuery = '';
                         tagFilterInput.value = "";
-                        resetAndReload(true);
+                        resetAndReload(false);
                         pathPresets.selectedIndex = 0;
                     }
                 };
@@ -2450,8 +2467,7 @@ app.registerExtension({
                     tagFilterInput.value = "";
                     lastFilteredTags = '';
                     clearTimeout(tagFilterDebounceTimer);
-                    const checkboxes = multiSelectTagDropdown.querySelectorAll('input[type="checkbox"]');
-                    checkboxes.forEach(cb => { cb.checked = false; });
+                    syncTagDropdownToInput();
                     saveStateAndReload(false);
                 });
 
