@@ -590,11 +590,12 @@ app.registerExtension({
                             background-color: rgba(80,80,80,0.6);
                         }
                         
-                        #${uniqueId} .edit-tags-btn, #${uniqueId} .open-media-btn { position: absolute; bottom: 2px; width: 22px; height: 22px; background-color: rgba(0,0,0,0.5); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; transition: background-color 0.2s; opacity: 0; cursor: pointer; }
+                        #${uniqueId} .edit-tags-btn, #${uniqueId} .open-media-btn, #${uniqueId} .copy-path-btn { position: absolute; bottom: 2px; width: 22px; height: 22px; background-color: rgba(0,0,0,0.5); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; transition: background-color 0.2s; opacity: 0; cursor: pointer; }
                         #${uniqueId} .open-media-btn { right: 2px; }
                         #${uniqueId} .edit-tags-btn { right: 28px; }
-                        #${uniqueId} .lmm-gallery-card:hover .edit-tags-btn, #${uniqueId} .lmm-gallery-card:hover .open-media-btn { opacity: 1; }
-                        #${uniqueId} .edit-tags-btn:hover, #${uniqueId} .open-media-btn:hover { background-color: rgba(0,0,0,0.8); }
+                        #${uniqueId} .copy-path-btn { right: 54px; }
+                        #${uniqueId} .lmm-gallery-card:hover .edit-tags-btn, #${uniqueId} .lmm-gallery-card:hover .open-media-btn, #${uniqueId} .lmm-gallery-card:hover .copy-path-btn { opacity: 1; }
+                        #${uniqueId} .edit-tags-btn:hover, #${uniqueId} .open-media-btn:hover, #${uniqueId} .copy-path-btn:hover { background-color: rgba(0,0,0,0.8); }
                         #${uniqueId} .lmm-star-rating { font-size: 16px; cursor: pointer; color: #555; }
                         #${uniqueId} .lmm-star-rating .lmm-star:hover { color: #FFD700 !important; }
                         #${uniqueId} .lmm-star-rating .lmm-star.lmm-rated { color: #FFC700; }
@@ -609,7 +610,8 @@ app.registerExtension({
                         #${uniqueId} .lmm-tag-editor-list { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
                         #${uniqueId} .lmm-tag-editor-list .lmm-tag .lmm-remove-tag { margin-left: 4px; color: #fdd; cursor: pointer; font-weight: bold; }
                         #${uniqueId} .lmm-show-selected-btn.active { background-color: #4A90E2; color: white; border-color: #4A90E2; }
-                        #${uniqueId} .lmm-recursive-btn.active { background-color: #7C3AED; color: white; border-color: #7C3AED; }
+                        #${uniqueId} .lmm-recursive-btn { transition: opacity 0.15s; }
+                        #${uniqueId} .lmm-recursive-btn.inactive { opacity: 0.2; }
                         #${uniqueId} .lmm-tag-filter-wrapper { display: flex; flex-grow: 1; position: relative; align-items: center; }
                         #${uniqueId} .lmm-tag-filter-wrapper input { flex-grow: 1; transition: box-shadow 0.2s; }
                         #${uniqueId} .lmm-multiselect-tag { position: relative; flex-grow: 1; }
@@ -637,6 +639,19 @@ app.registerExtension({
                             display: block; padding: 0px 0px; cursor: pointer; font-size: 12px; color: #ccc;
                         }
                         #${uniqueId} .lmm-multiselect-tag-dropdown label:hover { background-color: #444; }
+                        #${uniqueId} .lmm-multiselect-rating { position: relative; }
+                        #${uniqueId} .lmm-multiselect-rating-display {
+                            background-color: #333; color: #ccc; border: 1px solid #555; border-radius: 4px; padding: 4px 20px 4px 4px; font-size: 10px;
+                            height: 23px; cursor: pointer; display: flex; align-items: center; gap: 4px; white-space: nowrap;
+                        }
+                        #${uniqueId} .lmm-multiselect-rating-dropdown {
+                            display: none; position: absolute; top: 100%; left: 0; min-width: 100%; background-color: #222;
+                            border: 1px solid #555; border-top: none; max-height: 200px; overflow-y: auto; z-index: 10;
+                        }
+                        #${uniqueId} .lmm-multiselect-rating-dropdown label {
+                            display: block; padding: 0px 2px; cursor: pointer; font-size: 12px; color: #ccc; white-space: nowrap;
+                        }
+                        #${uniqueId} .lmm-multiselect-rating-dropdown label:hover { background-color: #444; }
                         #${uniqueId} .lmm-tag-filter-mode-btn {
                             padding: 4px 8px; background-color: #555; color: #fff; border: 1px solid #666;
                             border-radius: 4px; cursor: pointer; flex-shrink: 0;
@@ -672,6 +687,9 @@ app.registerExtension({
                         #${uniqueId} .lmm-search-wrapper input:not(:placeholder-shown) + .lmm-clear-search-button { display: block; }
                         #${uniqueId} .lmm-search-wrapper input:not(:placeholder-shown) + .lmm-clear-search-button + .lmm-search-info-button { display: none; }
                         #${uniqueId} .lmm-search-info-button { position: absolute; right: 0px; color: #777; cursor: pointer; font-size: 13px; padding: 2px 4px; user-select: none; }
+                        #${uniqueId} .lmm-type-icons { display: flex; gap: 2px; font-size: 14px; line-height: 1; align-items: center; }
+                        #${uniqueId} .lmm-type-icons span { cursor: pointer; transition: opacity 0.15s; user-select: none; }
+                        #${uniqueId} .lmm-type-icons span.inactive { opacity: 0.2; }
                         #${uniqueId} .lmm-search-scope-container { flex-shrink: 0; }
                         #${uniqueId} .lmm-scope-icons { display: flex; gap: 2px; font-size: 14px; line-height: 1; align-items: center; }
                         #${uniqueId} .lmm-scope-icons span { cursor: pointer; transition: opacity 0.15s; user-select: none; }
@@ -729,17 +747,18 @@ app.registerExtension({
                             </div>
                         </div>
                         <div class="lmm-controls" style="gap: 5px;">
-                            <label>Sort by:</label> <select class="lmm-sort-by"> <option value="name">Name</option> <option value="date">Date</option> <option value="rating">Rating</option> </select>
-                            <label>Order:</label> <select class="lmm-sort-order"> <option value="asc">Ascending</option> <option value="desc">Descending</option> </select>
-                            <label>Rating:</label>
-                            <select class="lmm-min-rating"><option value="0">0</option><option value="1">1★</option><option value="2">2★</option><option value="3">3★</option><option value="4">4★</option><option value="5">5★</option></select>
-                            <span style="color: #888;">–</span>
-                            <select class="lmm-max-rating"><option value="0">0</option><option value="1">1★</option><option value="2">2★</option><option value="3">3★</option><option value="4">4★</option><option value="5" selected>5★</option></select>
+                            <label>Sort</label> <select class="lmm-sort-by"> <option value="name">Name</option> <option value="date">Date</option> <option value="rating">Rating</option> </select>
+                            <select class="lmm-sort-order"> <option value="asc">Ascending</option> <option value="desc">Descending</option> </select>
+                            <div class="lmm-multiselect-rating">
+                                <div class="lmm-multiselect-rating-display">
+                                    <span class="lmm-rating-display-text">0★ 1★ 2★ 3★ 4★ 5★</span>
+                                    <span class="lmm-multiselect-arrow">▼</span>
+                                </div>
+                                <div class="lmm-multiselect-rating-dropdown"></div>
+                            </div>
                             <div style="margin-left: auto; display: flex; align-items: center; gap: 5px;">
-                                <label>Images:</label> <input type="checkbox" class="lmm-show-images" checked>
-                                <label>Videos:</label> <input type="checkbox" class="lmm-show-videos">
-                                <label>Audio:</label> <input type="checkbox" class="lmm-show-audio">
-                                <button class="lmm-recursive-btn" title="Show rated/tagged items from all subdirectories recursively">🔍 Recursive</button>
+                                <span class="lmm-type-icons"><span data-type="images" title="Show images">🖼️</span><span data-type="videos" title="Show videos">🎬</span><span data-type="audio" class="inactive" title="Show audio">🔊</span></span>
+                                <button class="lmm-recursive-btn inactive" title="Show items from all subdirectories recursively">📂 Recursive</button>
                                 <button class="lmm-show-selected-btn" title="Show all selected items across folders">Show Selected</button>
                                 <button class="lmm-batch-action-btn lmm-batch-select-all-btn" title="Select All Files in Current View">Select All</button>
                             </div>
@@ -775,17 +794,25 @@ app.registerExtension({
                 const addPathButton = controls.querySelector(".lmm-add-path-button");
                 const removePathButton = controls.querySelector(".lmm-remove-path-button");
                 const upButton = controls.querySelector(".lmm-up-button");
-                const showImagesCheckbox = controls.querySelector(".lmm-show-images");
-                const showVideosCheckbox = controls.querySelector(".lmm-show-videos");
-                const showAudioCheckbox = controls.querySelector(".lmm-show-audio");
+                const typeIcons = controls.querySelectorAll(".lmm-type-icons span[data-type]");
+                const isTypeActive = (type) => !controls.querySelector(`.lmm-type-icons span[data-type="${type}"]`).classList.contains('inactive');
+                typeIcons.forEach(icon => {
+                    icon.addEventListener('click', () => {
+                        icon.classList.toggle('inactive');
+                        saveStateAndReload(false);
+                    });
+                });
                 const tagFilterInput = controls.querySelector(".lmm-tag-filter-input");
                 const tagFilterModeBtn = controls.querySelector(".lmm-tag-filter-mode-btn");
                 const combineModeBtn = controls.querySelector(".lmm-combine-mode-btn");
                 const multiSelectTagContainer = controls.querySelector(".lmm-multiselect-tag");
                 const multiSelectTagDisplay = multiSelectTagContainer.querySelector(".lmm-multiselect-tag-display");
                 const multiSelectTagDropdown = multiSelectTagContainer.querySelector(".lmm-multiselect-tag-dropdown");
-                const minRatingSelect = controls.querySelector(".lmm-min-rating");
-                const maxRatingSelect = controls.querySelector(".lmm-max-rating");
+                const ratingContainer = controls.querySelector(".lmm-multiselect-rating");
+                const ratingDisplay = ratingContainer.querySelector(".lmm-multiselect-rating-display");
+                const ratingDropdown = ratingContainer.querySelector(".lmm-multiselect-rating-dropdown");
+                const ratingDisplayText = ratingContainer.querySelector(".lmm-rating-display-text");
+                const ratingArrow = ratingContainer.querySelector(".lmm-multiselect-arrow");
                 const recursiveBtn = controls.querySelector(".lmm-recursive-btn");
                 const searchInput = controls.querySelector(".lmm-search-input");
                 const searchStatus = controls.querySelector(".lmm-search-status");
@@ -1434,6 +1461,18 @@ app.registerExtension({
                     try {
                         const data = await fetchTagsCached();
                         multiSelectTagDropdown.innerHTML = '';
+                        const allLabel = document.createElement('label');
+                        allLabel.style.borderBottom = '1px solid #444';
+                        const allCb = document.createElement('input');
+                        allCb.type = 'checkbox';
+                        allCb.className = 'lmm-select-all';
+                        allCb.addEventListener('change', () => {
+                            multiSelectTagDropdown.querySelectorAll('input[type="checkbox"]:not(.lmm-select-all)').forEach(cb => { cb.checked = allCb.checked; });
+                            handleTagSelectionChange();
+                        });
+                        allLabel.appendChild(allCb);
+                        allLabel.appendChild(document.createTextNode(' All'));
+                        multiSelectTagDropdown.appendChild(allLabel);
                         if (data.tags) {
                             data.tags.forEach(tag => {
                                 const label = document.createElement('label');
@@ -1589,8 +1628,9 @@ app.registerExtension({
                                 ${workflowTextBadge}
                             </div>
                             <div class="lmm-tag-list">${tags}</div>
-                            <div class="open-media-btn">🔎</div>
-                            <div class="edit-tags-btn">✏️</div>
+                            <div class="copy-path-btn" title="Copy file path">📁</div>
+                            <div class="open-media-btn" title="Open in lightbox">🔎</div>
+                            <div class="edit-tags-btn" title="Edit tags">✏️</div>
                         `;
                         card.appendChild(infoPanel);
 
@@ -1659,6 +1699,28 @@ app.registerExtension({
                             const currentMediaList = allItems.filter(i => ['image', 'video', 'audio'].includes(i.type));
                             const idx = currentMediaList.findIndex(i => i.path === item.path);
                             if (idx !== -1) showMediaAtIndex(idx, currentMediaList);
+                        });
+
+                        const copyPathBtn = infoPanel.querySelector(".copy-path-btn");
+                        copyPathBtn.addEventListener("click", (e) => {
+                            e.stopPropagation();
+                            const doCopy = (text) => {
+                                if (navigator.clipboard?.writeText) {
+                                    return navigator.clipboard.writeText(text);
+                                }
+                                const ta = document.createElement('textarea');
+                                ta.value = text;
+                                ta.style.cssText = 'position:fixed;opacity:0';
+                                document.body.appendChild(ta);
+                                ta.select();
+                                document.execCommand('copy');
+                                ta.remove();
+                                return Promise.resolve();
+                            };
+                            doCopy(item.path).then(() => {
+                                copyPathBtn.textContent = '✓';
+                                setTimeout(() => { copyPathBtn.textContent = '📁'; }, 1000);
+                            }).catch(() => {});
                         });
 
                         const starRating = infoPanel.querySelector('.lmm-star-rating');
@@ -1751,9 +1813,9 @@ app.registerExtension({
                     breadcrumbEl.style.pointerEvents = "auto";
 
                     const directory = pathInput.value;
-                    const showImages = showImagesCheckbox.checked;
-                    const showVideos = showVideosCheckbox.checked;
-                    const showAudio = showAudioCheckbox.checked;
+                    const showImages = isTypeActive('images');
+                    const showVideos = isTypeActive('videos');
+                    const showAudio = isTypeActive('audio');
                     const filterTag = tagFilterInput.value;
                     const currentSearchQuery = searchInput.value.trim();
                     const currentSearchScopes = getSelectedScopes();
@@ -1787,7 +1849,8 @@ app.registerExtension({
                     }
                     let url = `/local_image_gallery/images?directory=${encodeURIComponent(directory)}&page=${page}&sort_by=${sortBy}&sort_order=${sortOrder}&show_images=${showImages}&show_videos=${showVideos}&show_audio=${showAudio}&filter_tag=${encodeURIComponent(filterTag)}&search_mode=${searchMode}&filter_mode=${filterMode}&combine_mode=${combineMode}&force_refresh=${forceRefresh}&search_query=${encodeURIComponent(currentSearchQuery)}`;
                     currentSearchScopes.forEach(s => { url += `&search_scope=${encodeURIComponent(s)}`; });
-                    url += `&min_rating=${minRatingSelect.value}&max_rating=${maxRatingSelect.value}&recursive=${recursiveMode}`;
+                    const selectedRatings = Array.from(ratingDropdown.querySelectorAll('input[type="checkbox"]:not(.lmm-select-all):checked')).map(cb => cb.value);
+                    url += `&filter_ratings=${selectedRatings.join(',')}&recursive=${recursiveMode}`;
 
                     if (selection.length > 0) {
                         selection.forEach(item => { url += `&selected_paths=${encodeURIComponent(item.path)}`; });
@@ -1869,7 +1932,7 @@ app.registerExtension({
                         }
 
                         if (allItems.length === 0) {
-                            placeholder.textContent = currentSearchQuery ? `No files matching "${currentSearchQuery}".` : (api_data.is_global_search ? 'No items found for this tag.' : 'The folder is empty.');
+                            placeholder.textContent = currentSearchQuery ? `No files matching "${currentSearchQuery}".` : (recursiveMode ? 'No media files found in subdirectories.' : (api_data.is_global_search ? 'No items found for this tag.' : 'The folder is empty.'));
                             placeholder.style.display = 'block';
                         } else {
                             placeholder.style.display = 'none';
@@ -2071,28 +2134,39 @@ app.registerExtension({
                     const sortOrder = controls.querySelector(".lmm-sort-order");
 
                     const state = {
+                        last_path: lastKnownPath,
                         sort_by: sortBy.value,
                         sort_order: sortOrder.value,
-                        show_images: showImagesCheckbox.checked,
-                        show_videos: showVideosCheckbox.checked,
-                        show_audio: showAudioCheckbox.checked,
+                        show_images: isTypeActive('images'),
+                        show_videos: isTypeActive('videos'),
+                        show_audio: isTypeActive('audio'),
                         filter_tag: tagFilterInput.value,
                         filter_mode: tagFilterModeBtn.textContent,
                         combine_mode: combineModeBtn.textContent,
                         search_query: searchInput.dataset.savedValue || searchInput.value,
                         search_scopes: getSelectedScopes(),
                         show_selected_mode: showSelectedMode,
-                        min_rating: parseInt(minRatingSelect.value),
-                        max_rating: parseInt(maxRatingSelect.value),
+                        filter_ratings: Array.from(ratingDropdown.querySelectorAll('input[type="checkbox"]:not(.lmm-select-all):checked')).map(cb => parseInt(cb.value)),
                         recursive: recursiveMode,
+                        selection: selection,
                     };
                     setUiState.call(this, this.id, state);
+                    // Also save to node properties for clipspace (copy-paste)
+                    node_instance.setProperty("lmm_state", JSON.stringify(state));
                 };
 
                 const handleTagSelectionChange = () => {
-                    const selectedTags = Array.from(multiSelectTagDropdown.querySelectorAll('input:checked')).map(cb => cb.value);
+                    const checkboxes = multiSelectTagDropdown.querySelectorAll('input[type="checkbox"]:not(.lmm-select-all)');
+                    const selectedTags = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
                     tagFilterInput.value = selectedTags.join(',');
                     lastFilteredTags = tagFilterInput.value.trim();
+                    const tagAllCb = multiSelectTagDropdown.querySelector('.lmm-select-all');
+                    if (tagAllCb) {
+                        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+                        const noneChecked = Array.from(checkboxes).every(cb => !cb.checked);
+                        tagAllCb.checked = allChecked;
+                        tagAllCb.indeterminate = !allChecked && !noneChecked;
+                    }
                     saveStateAndReload(false);
                 };
 
@@ -2166,14 +2240,61 @@ app.registerExtension({
                 });
 
                 controls.querySelectorAll('select:not(.lmm-path-presets)').forEach(select => { select.addEventListener('change', () => saveStateAndReload(false)); });
-                showImagesCheckbox.addEventListener('change', () => saveStateAndReload(false));
-                showVideosCheckbox.addEventListener('change', () => saveStateAndReload(false));
-                showAudioCheckbox.addEventListener('change', () => saveStateAndReload(false));
-                minRatingSelect.addEventListener('change', () => saveStateAndReload(false));
-                maxRatingSelect.addEventListener('change', () => saveStateAndReload(false));
+                // Type icon click handlers are set up at DOM query time above
+                // Rating dropdown population and handlers
+                const ratingOptions = [
+                    { value: '0', label: '0★' },
+                    { value: '1', label: '1★' },
+                    { value: '2', label: '2★' },
+                    { value: '3', label: '3★' },
+                    { value: '4', label: '4★' },
+                    { value: '5', label: '5★' },
+                ];
+                const ratingAllCb = document.createElement('input');
+                ratingAllCb.type = 'checkbox';
+                ratingAllCb.className = 'lmm-select-all';
+                ratingAllCb.checked = true;
+                const handleRatingSelectionChange = () => {
+                    const checkboxes = ratingDropdown.querySelectorAll('input[type="checkbox"]:not(.lmm-select-all)');
+                    const selected = Array.from(checkboxes).filter(cb => cb.checked);
+                    const allChecked = selected.length === checkboxes.length;
+                    const noneChecked = selected.length === 0;
+                    ratingAllCb.checked = allChecked;
+                    ratingAllCb.indeterminate = !allChecked && !noneChecked;
+                    const checkedSet = new Set(selected.map(cb => cb.value));
+                    ratingDisplayText.textContent = ratingOptions.map(opt =>
+                        `${opt.value}${checkedSet.has(opt.value) ? '★' : '☆'}`
+                    ).join(' ');
+                    saveStateAndReload(false);
+                };
+                const ratingAllLabel = document.createElement('label');
+                ratingAllLabel.style.borderBottom = '1px solid #444';
+                ratingAllCb.addEventListener('change', () => {
+                    ratingDropdown.querySelectorAll('input[type="checkbox"]:not(.lmm-select-all)').forEach(cb => { cb.checked = ratingAllCb.checked; });
+                    handleRatingSelectionChange();
+                });
+                ratingAllLabel.appendChild(ratingAllCb);
+                ratingAllLabel.appendChild(document.createTextNode(' All'));
+                ratingDropdown.appendChild(ratingAllLabel);
+                ratingOptions.forEach(opt => {
+                    const label = document.createElement('label');
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.value = opt.value;
+                    cb.checked = true;
+                    cb.addEventListener('change', handleRatingSelectionChange);
+                    label.appendChild(cb);
+                    label.appendChild(document.createTextNode(` ${opt.label}`));
+                    ratingDropdown.appendChild(label);
+                });
+                ratingDisplay.addEventListener('click', () => {
+                    const isVisible = ratingDropdown.style.display === 'block';
+                    ratingDropdown.style.display = isVisible ? 'none' : 'block';
+                    ratingArrow.classList.toggle('open', !isVisible);
+                });
                 recursiveBtn.addEventListener('click', () => {
                     recursiveMode = !recursiveMode;
-                    recursiveBtn.classList.toggle('active', recursiveMode);
+                    recursiveBtn.classList.toggle('inactive', !recursiveMode);
                     saveStateAndReload(false);
                 });
                 let searchDebounceTimer = null;
@@ -2256,6 +2377,10 @@ app.registerExtension({
                     if (!multiSelectTagContainer.contains(e.target)) {
                         multiSelectTagDropdown.style.display = 'none';
                         arrow.classList.remove('open');
+                    }
+                    if (!ratingContainer.contains(e.target)) {
+                        ratingDropdown.style.display = 'none';
+                        ratingArrow.classList.remove('open');
                     }
                 });
 
@@ -2464,13 +2589,20 @@ app.registerExtension({
                     try {
                         const galleryId = this.properties.gallery_unique_id;
                         const response = await api.fetchApi(`/local_image_gallery/get_ui_state?node_id=${this.id}&gallery_id=${galleryId}`);
-                        const state = await response.json();
+                        let state = await response.json();
+                        // Clipspace fallback: if server returned defaults, try properties
+                        if (state && !state.last_path && node_instance.properties.lmm_state) {
+                            try {
+                                const propState = JSON.parse(node_instance.properties.lmm_state);
+                                state = { ...state, ...propState };
+                            } catch (e) {}
+                        }
                         if (state) {
                             controls.querySelector(".lmm-sort-by").value = state.sort_by;
                             controls.querySelector(".lmm-sort-order").value = state.sort_order;
-                            showImagesCheckbox.checked = state.show_images !== false;
-                            showVideosCheckbox.checked = state.show_videos;
-                            showAudioCheckbox.checked = state.show_audio;
+                            controls.querySelector('.lmm-type-icons span[data-type="images"]').classList.toggle('inactive', state.show_images === false);
+                            controls.querySelector('.lmm-type-icons span[data-type="videos"]').classList.toggle('inactive', !state.show_videos);
+                            controls.querySelector('.lmm-type-icons span[data-type="audio"]').classList.toggle('inactive', !state.show_audio);
                             tagFilterInput.value = state.filter_tag;
                             lastFilteredTags = (state.filter_tag || '').trim();
                             searchInput.value = state.search_query || '';
@@ -2480,10 +2612,15 @@ app.registerExtension({
                             savedScopes.forEach(s => activeScopes.add(s));
                             updateScopeDisplay();
                             showSelectedMode = state.show_selected_mode || false;
-                            if (state.min_rating !== undefined) minRatingSelect.value = state.min_rating;
-                            if (state.max_rating !== undefined) maxRatingSelect.value = state.max_rating;
+                            if (state.filter_ratings && state.filter_ratings.length > 0) {
+                                const selectedSet = new Set(state.filter_ratings);
+                                ratingDropdown.querySelectorAll('input[type="checkbox"]:not(.lmm-select-all)').forEach(cb => {
+                                    cb.checked = selectedSet.has(parseInt(cb.value));
+                                });
+                                handleRatingSelectionChange();
+                            }
                             recursiveMode = state.recursive || false;
-                            recursiveBtn.classList.toggle('active', recursiveMode);
+                            recursiveBtn.classList.toggle('inactive', !recursiveMode);
 
                             if (state.filter_mode) {
                                 tagFilterModeBtn.textContent = state.filter_mode;

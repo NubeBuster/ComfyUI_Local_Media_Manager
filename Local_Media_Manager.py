@@ -1221,11 +1221,14 @@ async def get_local_images(request):
     filter_tags = [tag.strip() for tag in filter_tags_str.split(',') if tag.strip()]
     filter_mode = request.query.get('filter_mode', 'OR').upper()
     combine_mode = request.query.get('combine_mode', 'AND').upper()
-    try:
-        min_rating = max(0, min(5, int(request.query.get('min_rating', 0))))
-        max_rating = max(0, min(5, int(request.query.get('max_rating', 5))))
-    except (ValueError, TypeError):
-        min_rating, max_rating = 0, 5
+    filter_ratings_str = request.query.get('filter_ratings', '').strip()
+    if filter_ratings_str:
+        try:
+            filter_ratings = set(int(r) for r in filter_ratings_str.split(',') if r.strip())
+        except ValueError:
+            filter_ratings = None
+    else:
+        filter_ratings = None
     recursive = request.query.get('recursive', 'false').lower() == 'true'
 
     page = int(request.query.get('page', 1))
@@ -1247,7 +1250,9 @@ async def get_local_images(request):
                 return any(ft in lower_item_tags for ft in filter_tags)
 
         def check_rating(item_rating):
-            return min_rating <= item_rating <= max_rating
+            if filter_ratings is None:
+                return True
+            return item_rating in filter_ratings
 
         def _type_visible(item_type):
             return (item_type == 'dir' or
@@ -1315,31 +1320,24 @@ async def get_local_images(request):
                         all_items_with_meta.append(item)
 
         elif recursive and directory:
-            metadata = load_metadata()
-            norm_dir = directory.replace("\\", "/").rstrip("/") + "/"
-            comfy_dir = os.path.dirname(os.path.dirname(NODE_DIR))
-            for path, meta in metadata.items():
-                norm_path = path.replace("\\", "/")
-                if not os.path.isabs(norm_path):
-                    norm_path = os.path.join(comfy_dir, norm_path).replace("\\", "/")
-                if not norm_path.startswith(norm_dir):
+            # BFS using per-directory cache — each subdir is individually cached
+            dirs_to_scan = [directory]
+            while dirs_to_scan:
+                current_dir = dirs_to_scan.pop()
+                dir_items = await get_directory_data(current_dir, force_refresh)
+                if dir_items is None:
                     continue
-                if not check_rating(meta.get('rating', 0)):
-                    continue
-                if not check_tags(meta.get('tags', [])):
-                    continue
-                if not os.path.exists(norm_path):
-                    continue
-                ext = os.path.splitext(norm_path)[1].lower()
-                item_type = _ext_to_type(ext)
-                if item_type and _type_visible(item_type):
-                    try:
-                        stats = os.stat(norm_path)
-                        all_items_with_meta.append(
-                            _build_item(norm_path, os.path.basename(norm_path), stats, item_type, meta=meta)
-                        )
-                    except Exception:
+                for item in dir_items:
+                    if item['type'] == 'dir':
+                        dirs_to_scan.append(item['path'])
                         continue
+                    if not _type_visible(item['type']):
+                        continue
+                    if not check_tags(item.get('tags', [])):
+                        continue
+                    if not check_rating(item.get('rating', 0)):
+                        continue
+                    all_items_with_meta.append(item)
 
         elif search_mode == 'global' and filter_tags:
             roots = _resolve_scope_roots(search_scopes, directory)
@@ -1496,8 +1494,7 @@ async def get_ui_state(request):
             "filter_tag": "",
             "search_query": "",
             "search_scopes": ["current", "input", "output", "saved"],
-            "min_rating": 0,
-            "max_rating": 5,
+            "filter_ratings": [],
             "recursive": False
         }
 
