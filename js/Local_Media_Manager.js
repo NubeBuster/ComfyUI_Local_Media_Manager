@@ -609,6 +609,7 @@ app.registerExtension({
                         #${uniqueId} .lmm-tag-editor-list { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
                         #${uniqueId} .lmm-tag-editor-list .lmm-tag .lmm-remove-tag { margin-left: 4px; color: #fdd; cursor: pointer; font-weight: bold; }
                         #${uniqueId} .lmm-show-selected-btn.active { background-color: #4A90E2; color: white; border-color: #4A90E2; }
+                        #${uniqueId} .lmm-recursive-btn.active { background-color: #7C3AED; color: white; border-color: #7C3AED; }
                         #${uniqueId} .lmm-tag-filter-wrapper { display: flex; flex-grow: 1; position: relative; align-items: center; }
                         #${uniqueId} .lmm-tag-filter-wrapper input { flex-grow: 1; transition: box-shadow 0.2s; }
                         #${uniqueId} .lmm-multiselect-tag { position: relative; flex-grow: 1; }
@@ -730,10 +731,15 @@ app.registerExtension({
                         <div class="lmm-controls" style="gap: 5px;">
                             <label>Sort by:</label> <select class="lmm-sort-by"> <option value="name">Name</option> <option value="date">Date</option> <option value="rating">Rating</option> </select>
                             <label>Order:</label> <select class="lmm-sort-order"> <option value="asc">Ascending</option> <option value="desc">Descending</option> </select>
+                            <label>Rating:</label>
+                            <select class="lmm-min-rating"><option value="0">0</option><option value="1">1★</option><option value="2">2★</option><option value="3">3★</option><option value="4">4★</option><option value="5">5★</option></select>
+                            <span style="color: #888;">–</span>
+                            <select class="lmm-max-rating"><option value="0">0</option><option value="1">1★</option><option value="2">2★</option><option value="3">3★</option><option value="4">4★</option><option value="5" selected>5★</option></select>
                             <div style="margin-left: auto; display: flex; align-items: center; gap: 5px;">
                                 <label>Images:</label> <input type="checkbox" class="lmm-show-images" checked>
                                 <label>Videos:</label> <input type="checkbox" class="lmm-show-videos">
                                 <label>Audio:</label> <input type="checkbox" class="lmm-show-audio">
+                                <button class="lmm-recursive-btn" title="Show rated/tagged items from all subdirectories recursively">🔍 Recursive</button>
                                 <button class="lmm-show-selected-btn" title="Show all selected items across folders">Show Selected</button>
                                 <button class="lmm-batch-action-btn lmm-batch-select-all-btn" title="Select All Files in Current View">Select All</button>
                             </div>
@@ -778,6 +784,9 @@ app.registerExtension({
                 const multiSelectTagContainer = controls.querySelector(".lmm-multiselect-tag");
                 const multiSelectTagDisplay = multiSelectTagContainer.querySelector(".lmm-multiselect-tag-display");
                 const multiSelectTagDropdown = multiSelectTagContainer.querySelector(".lmm-multiselect-tag-dropdown");
+                const minRatingSelect = controls.querySelector(".lmm-min-rating");
+                const maxRatingSelect = controls.querySelector(".lmm-max-rating");
+                const recursiveBtn = controls.querySelector(".lmm-recursive-btn");
                 const searchInput = controls.querySelector(".lmm-search-input");
                 const searchStatus = controls.querySelector(".lmm-search-status");
                 const searchScopeContainer = controls.querySelector(".lmm-search-scope-container");
@@ -1231,6 +1240,7 @@ app.registerExtension({
                 let isLoading = false, currentPage = 1, totalPages = 1, parentDir = null;
                 let selection = [];
                 let showSelectedMode = false;
+                let recursiveMode = false;
                 let lastKnownPath = "";
                 let selectedCardsForEditing = new Set();
 
@@ -1777,6 +1787,7 @@ app.registerExtension({
                     }
                     let url = `/local_image_gallery/images?directory=${encodeURIComponent(directory)}&page=${page}&sort_by=${sortBy}&sort_order=${sortOrder}&show_images=${showImages}&show_videos=${showVideos}&show_audio=${showAudio}&filter_tag=${encodeURIComponent(filterTag)}&search_mode=${searchMode}&filter_mode=${filterMode}&combine_mode=${combineMode}&force_refresh=${forceRefresh}&search_query=${encodeURIComponent(currentSearchQuery)}`;
                     currentSearchScopes.forEach(s => { url += `&search_scope=${encodeURIComponent(s)}`; });
+                    url += `&min_rating=${minRatingSelect.value}&max_rating=${maxRatingSelect.value}&recursive=${recursiveMode}`;
 
                     if (selection.length > 0) {
                         selection.forEach(item => { url += `&selected_paths=${encodeURIComponent(item.path)}`; });
@@ -2071,6 +2082,9 @@ app.registerExtension({
                         search_query: searchInput.dataset.savedValue || searchInput.value,
                         search_scopes: getSelectedScopes(),
                         show_selected_mode: showSelectedMode,
+                        min_rating: parseInt(minRatingSelect.value),
+                        max_rating: parseInt(maxRatingSelect.value),
+                        recursive: recursiveMode,
                     };
                     setUiState.call(this, this.id, state);
                 };
@@ -2155,6 +2169,13 @@ app.registerExtension({
                 showImagesCheckbox.addEventListener('change', () => saveStateAndReload(false));
                 showVideosCheckbox.addEventListener('change', () => saveStateAndReload(false));
                 showAudioCheckbox.addEventListener('change', () => saveStateAndReload(false));
+                minRatingSelect.addEventListener('change', () => saveStateAndReload(false));
+                maxRatingSelect.addEventListener('change', () => saveStateAndReload(false));
+                recursiveBtn.addEventListener('click', () => {
+                    recursiveMode = !recursiveMode;
+                    recursiveBtn.classList.toggle('active', recursiveMode);
+                    saveStateAndReload(false);
+                });
                 let searchDebounceTimer = null;
                 let lastSearchedQuery = '';
 
@@ -2459,6 +2480,10 @@ app.registerExtension({
                             savedScopes.forEach(s => activeScopes.add(s));
                             updateScopeDisplay();
                             showSelectedMode = state.show_selected_mode || false;
+                            if (state.min_rating !== undefined) minRatingSelect.value = state.min_rating;
+                            if (state.max_rating !== undefined) maxRatingSelect.value = state.max_rating;
+                            recursiveMode = state.recursive || false;
+                            recursiveBtn.classList.toggle('active', recursiveMode);
 
                             if (state.filter_mode) {
                                 tagFilterModeBtn.textContent = state.filter_mode;
@@ -2470,6 +2495,15 @@ app.registerExtension({
                             }
 
                             selection = state.selection || [];
+                            // Fallback: if UI state has no selection, try properties (copy-paste scenario)
+                            if (selection.length === 0) {
+                                try {
+                                    const propSel = JSON.parse(node_instance.properties.selection || "[]");
+                                    if (Array.isArray(propSel) && propSel.length > 0) {
+                                        selection = propSel;
+                                    }
+                                } catch (e) {}
+                            }
                             updateBatchActionButtonsState();
 
                             const selectionJson = JSON.stringify(selection);

@@ -1221,6 +1221,12 @@ async def get_local_images(request):
     filter_tags = [tag.strip() for tag in filter_tags_str.split(',') if tag.strip()]
     filter_mode = request.query.get('filter_mode', 'OR').upper()
     combine_mode = request.query.get('combine_mode', 'AND').upper()
+    try:
+        min_rating = max(0, min(5, int(request.query.get('min_rating', 0))))
+        max_rating = max(0, min(5, int(request.query.get('max_rating', 5))))
+    except (ValueError, TypeError):
+        min_rating, max_rating = 0, 5
+    recursive = request.query.get('recursive', 'false').lower() == 'true'
 
     page = int(request.query.get('page', 1))
     per_page = int(request.query.get('per_page', 50))
@@ -1240,6 +1246,15 @@ async def get_local_images(request):
             else:
                 return any(ft in lower_item_tags for ft in filter_tags)
 
+        def check_rating(item_rating):
+            return min_rating <= item_rating <= max_rating
+
+        def _type_visible(item_type):
+            return (item_type == 'dir' or
+                    (show_images and item_type == 'image') or
+                    (show_videos and item_type == 'video') or
+                    (show_audio and item_type == 'audio'))
+
         if search_query:
             comfy_dir = os.path.dirname(os.path.dirname(NODE_DIR))
             roots = _resolve_scope_roots(search_scopes, directory)
@@ -1249,12 +1264,6 @@ async def get_local_images(request):
             is_fuzzy = search_result['fuzzy']
             comfy_prefix = comfy_dir.rstrip("/") + "/"
 
-            def _type_visible(item_type):
-                return (item_type == 'dir' or
-                        (show_images and item_type == 'image') or
-                        (show_videos and item_type == 'video') or
-                        (show_audio and item_type == 'audio'))
-
             if combine_mode == 'OR' and filter_tags:
                 # Union: items matching search OR items matching tags
                 seen_paths = set()
@@ -1262,6 +1271,8 @@ async def get_local_images(request):
                 for item in search_items:
                     if item['path'].startswith(comfy_prefix):
                         item = {**item, 'path': item['path'][len(comfy_prefix):]}
+                    if not check_rating(item.get('rating', 0)):
+                        continue
                     if _type_visible(item['type']):
                         all_items_with_meta.append(item)
                         seen_paths.add(item['path'])
@@ -1278,7 +1289,7 @@ async def get_local_images(request):
                     if not any(real_path.startswith(root) or real_path.rstrip(os.sep) + os.sep == root
                                for root in resolved_roots):
                         continue
-                    if os.path.exists(path) and check_tags(meta.get('tags', [])):
+                    if os.path.exists(path) and check_tags(meta.get('tags', [])) and check_rating(meta.get('rating', 0)):
                         ext = os.path.splitext(path)[1].lower()
                         item_type = _ext_to_type(ext)
                         if item_type and _type_visible(item_type):
@@ -1298,8 +1309,37 @@ async def get_local_images(request):
                         item = {**item, 'path': item['path'][len(comfy_prefix):]}
                     if not check_tags(item.get('tags', [])):
                         continue
+                    if not check_rating(item.get('rating', 0)):
+                        continue
                     if _type_visible(item['type']):
                         all_items_with_meta.append(item)
+
+        elif recursive and directory:
+            metadata = load_metadata()
+            norm_dir = directory.replace("\\", "/").rstrip("/") + "/"
+            comfy_dir = os.path.dirname(os.path.dirname(NODE_DIR))
+            for path, meta in metadata.items():
+                norm_path = path.replace("\\", "/")
+                if not os.path.isabs(norm_path):
+                    norm_path = os.path.join(comfy_dir, norm_path).replace("\\", "/")
+                if not norm_path.startswith(norm_dir):
+                    continue
+                if not check_rating(meta.get('rating', 0)):
+                    continue
+                if not check_tags(meta.get('tags', [])):
+                    continue
+                if not os.path.exists(norm_path):
+                    continue
+                ext = os.path.splitext(norm_path)[1].lower()
+                item_type = _ext_to_type(ext)
+                if item_type and _type_visible(item_type):
+                    try:
+                        stats = os.stat(norm_path)
+                        all_items_with_meta.append(
+                            _build_item(norm_path, os.path.basename(norm_path), stats, item_type, meta=meta)
+                        )
+                    except Exception:
+                        continue
 
         elif search_mode == 'global' and filter_tags:
             roots = _resolve_scope_roots(search_scopes, directory)
@@ -1310,7 +1350,7 @@ async def get_local_images(request):
                 if not any(real_path.startswith(root) or real_path.rstrip(os.sep) + os.sep == root for root in resolved_roots):
                     continue
                 if os.path.exists(path):
-                    if check_tags(meta.get('tags', [])):
+                    if check_tags(meta.get('tags', [])) and check_rating(meta.get('rating', 0)):
                         ext = os.path.splitext(path)[1].lower()
                         item_type = ''
                         if show_images and ext in SUPPORTED_IMAGE_EXTENSIONS: item_type = 'image'
@@ -1330,12 +1370,9 @@ async def get_local_images(request):
             for item in directory_items:
                 if not check_tags(item.get('tags', [])):
                     continue
-
-                item_type = item['type']
-                if (item_type == 'dir' or
-                    (show_images and item_type == 'image') or
-                    (show_videos and item_type == 'video') or
-                    (show_audio and item_type == 'audio')):
+                if item['type'] != 'dir' and not check_rating(item.get('rating', 0)):
+                    continue
+                if _type_visible(item['type']):
                     all_items_with_meta.append(item)
 
         if selected_paths:
@@ -1360,7 +1397,7 @@ async def get_local_images(request):
         elif sort_by == 'rating': all_items_with_meta.sort(key=lambda x: x.get('rating', 0), reverse=reverse_order)
         else: all_items_with_meta.sort(key=lambda x: x['name'].lower(), reverse=reverse_order)
 
-        is_search_result = bool(search_query) or (search_mode == 'global' and filter_tags)
+        is_search_result = bool(search_query) or (search_mode == 'global' and filter_tags) or recursive
 
         if not is_search_result:
             all_items_with_meta.sort(key=lambda x: x['type'] != 'dir')
@@ -1458,7 +1495,10 @@ async def get_ui_state(request):
             "show_audio": False,
             "filter_tag": "",
             "search_query": "",
-            "search_scopes": ["current", "input", "output", "saved"]
+            "search_scopes": ["current", "input", "output", "saved"],
+            "min_rating": 0,
+            "max_rating": 5,
+            "recursive": False
         }
 
         node_saved_state = ui_states.get(node_key, {})
