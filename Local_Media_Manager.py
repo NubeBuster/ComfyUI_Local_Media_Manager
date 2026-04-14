@@ -286,10 +286,48 @@ def extract_prompts(metadata):
 
 class LocalMediaManagerNode:
     @classmethod
+    def _get_connected_outputs(cls, unique_id):
+        """Check which output slots are connected in the current prompt.
+
+        Inspects the running prompt via PromptServer to find downstream
+        references to this node's outputs.  Returns (image, mask) booleans.
+        Defaults to (True, True) on any failure so the hash stays conservative.
+        """
+        if unique_id is None:
+            return True, True
+        node_id = str(unique_id)
+        try:
+            from server import PromptServer
+            running = PromptServer.instance.prompt_queue.currently_running
+            prompt = None
+            for item in running.values():
+                prompt = item[2]  # (number, prompt_id, prompt, ...)
+                break
+            if not prompt:
+                return True, True
+            image_connected = False
+            mask_connected = False
+            for node_info in prompt.values():
+                for v in node_info.get("inputs", {}).values():
+                    if isinstance(v, list) and len(v) == 2 and str(v[0]) == node_id:
+                        if v[1] == 0:
+                            image_connected = True
+                        elif v[1] == 1:
+                            mask_connected = True
+            return image_connected, mask_connected
+        except Exception:
+            return True, True
+
+    @classmethod
     def IS_CHANGED(cls, selection, current_path="", **kwargs):
         m = hashlib.sha256()
         m.update(str(selection).encode())
         m.update(str(current_path).encode())
+
+        # Only invalidate on file changes for outputs that are actually wired up
+        image_connected, mask_connected = cls._get_connected_outputs(
+            kwargs.get("unique_id")
+        )
 
         try:
             selections_list = json.loads(selection)
@@ -298,24 +336,26 @@ class LocalMediaManagerNode:
             for item in selections_list:
                 path = item.get('path')
                 if path and os.path.exists(path):
-                    mtime = os.path.getmtime(path)
-                    m.update(str(mtime).encode())
+                    if image_connected:
+                        mtime = os.path.getmtime(path)
+                        m.update(str(mtime).encode())
 
-                    filename = os.path.basename(path)
-                    name, _ = os.path.splitext(filename)
-                    mask_filename = f"{name}_mask.png"
+                    if mask_connected:
+                        filename = os.path.basename(path)
+                        name, _ = os.path.splitext(filename)
+                        mask_filename = f"{name}_mask.png"
 
-                    input_mask_path = os.path.join(input_dir, mask_filename)
-                    if os.path.exists(input_mask_path):
-                        mask_mtime = os.path.getmtime(input_mask_path)
-                        m.update(str(mask_mtime).encode())
-                        m.update(str(input_mask_path).encode())
+                        input_mask_path = os.path.join(input_dir, mask_filename)
+                        if os.path.exists(input_mask_path):
+                            mask_mtime = os.path.getmtime(input_mask_path)
+                            m.update(str(mask_mtime).encode())
+                            m.update(str(input_mask_path).encode())
 
-                    original_mask_path = os.path.join(os.path.dirname(path), mask_filename)
-                    if os.path.exists(original_mask_path):
-                        mask_mtime = os.path.getmtime(original_mask_path)
-                        m.update(str(mask_mtime).encode())
-                        m.update(str(original_mask_path).encode())
+                        original_mask_path = os.path.join(os.path.dirname(path), mask_filename)
+                        if os.path.exists(original_mask_path):
+                            mask_mtime = os.path.getmtime(original_mask_path)
+                            m.update(str(mask_mtime).encode())
+                            m.update(str(original_mask_path).encode())
 
         except Exception:
             pass
@@ -981,6 +1021,19 @@ def _get_media_info(full_path, item_type):
         pass
     return None
 
+def _find_mask_path(full_path):
+    """Return the mask sidecar path if it exists (input dir first, then original dir), else None."""
+    name, _ = os.path.splitext(os.path.basename(full_path))
+    mask_filename = f"{name}_mask.png"
+    input_dir = folder_paths.get_input_directory()
+    input_mask = os.path.join(input_dir, mask_filename)
+    if os.path.exists(input_mask):
+        return input_mask
+    original_mask = os.path.join(os.path.dirname(full_path), mask_filename)
+    if os.path.exists(original_mask):
+        return original_mask
+    return None
+
 def _build_item(full_path, fname, stats, item_type, meta=None, metadata_store=None):
     """Build a media item dict. Provide either meta= directly or metadata_store= to look up by path."""
     if meta is None:
@@ -1008,6 +1061,10 @@ def _build_item(full_path, fname, stats, item_type, meta=None, metadata_store=No
     if has_wf is not None:
         item['has_workflow'] = has_wf
     if item_type in ('image', 'video'):
+        mask_path = _find_mask_path(full_path)
+        item['has_mask'] = mask_path is not None
+        if mask_path:
+            item['mask_path'] = mask_path
         media_info = _get_media_info(full_path, item_type)
         if media_info:
             item['media_info'] = media_info
@@ -1029,6 +1086,9 @@ def _scan_directory(directory):
             if os.path.isdir(full_path):
                 all_items.append(_build_item(full_path, item, stats, 'dir', metadata_store=metadata))
             else:
+                name_no_ext = os.path.splitext(item)[0]
+                if name_no_ext.endswith('_mask'):
+                    continue
                 ext = os.path.splitext(item)[1].lower()
                 item_type = _ext_to_type(ext)
                 if item_type:
@@ -1116,6 +1176,9 @@ def _search_walk(roots, query_lower, metadata, all_extensions, visited, match_fn
 
             for fname in filenames:
                 if not match_fn(query_lower, fname.lower()):
+                    continue
+                name_no_ext = os.path.splitext(fname)[0]
+                if name_no_ext.endswith('_mask'):
                     continue
                 ext = os.path.splitext(fname)[1].lower()
                 if ext not in all_extensions:
@@ -1230,6 +1293,7 @@ async def get_local_images(request):
     else:
         filter_ratings = None
     recursive = request.query.get('recursive', 'false').lower() == 'true'
+    mask_filter = request.query.get('mask_filter', '')  # 'mask_only', 'no_mask', or '' (no filter)
 
     page = int(request.query.get('page', 1))
     per_page = int(request.query.get('per_page', 50))
@@ -1253,6 +1317,16 @@ async def get_local_images(request):
             if filter_ratings is None:
                 return True
             return item_rating in filter_ratings
+
+        def check_mask(item):
+            if not mask_filter:
+                return True
+            has_mask = item.get('has_mask', False)
+            if mask_filter == 'mask_only':
+                return has_mask
+            if mask_filter == 'no_mask':
+                return not has_mask
+            return True
 
         def _type_visible(item_type):
             return (item_type == 'dir' or
@@ -1278,6 +1352,8 @@ async def get_local_images(request):
                         item = {**item, 'path': item['path'][len(comfy_prefix):]}
                     if not check_rating(item.get('rating', 0)):
                         continue
+                    if not check_mask(item):
+                        continue
                     if _type_visible(item['type']):
                         all_items_with_meta.append(item)
                         seen_paths.add(item['path'])
@@ -1301,6 +1377,8 @@ async def get_local_images(request):
                             try:
                                 stats = os.stat(path)
                                 built = _build_item(path, os.path.basename(path), stats, item_type, meta=meta)
+                                if not check_mask(built):
+                                    continue
                                 if path != norm_path:
                                     built = {**built, 'path': norm_path}
                                 all_items_with_meta.append(built)
@@ -1315,6 +1393,8 @@ async def get_local_images(request):
                     if not check_tags(item.get('tags', [])):
                         continue
                     if not check_rating(item.get('rating', 0)):
+                        continue
+                    if not check_mask(item):
                         continue
                     if _type_visible(item['type']):
                         all_items_with_meta.append(item)
@@ -1337,6 +1417,8 @@ async def get_local_images(request):
                         continue
                     if not check_rating(item.get('rating', 0)):
                         continue
+                    if not check_mask(item):
+                        continue
                     all_items_with_meta.append(item)
 
         elif search_mode == 'global' and filter_tags:
@@ -1357,7 +1439,10 @@ async def get_local_images(request):
                         if item_type:
                             try:
                                 stats = os.stat(path)
-                                all_items_with_meta.append(_build_item(path, os.path.basename(path), stats, item_type, meta=meta))
+                                built = _build_item(path, os.path.basename(path), stats, item_type, meta=meta)
+                                if not check_mask(built):
+                                    continue
+                                all_items_with_meta.append(built)
                             except Exception: continue
 
         elif search_mode == 'local':
@@ -1369,6 +1454,8 @@ async def get_local_images(request):
                 if not check_tags(item.get('tags', [])):
                     continue
                 if item['type'] != 'dir' and not check_rating(item.get('rating', 0)):
+                    continue
+                if item['type'] != 'dir' and not check_mask(item):
                     continue
                 if _type_visible(item['type']):
                     all_items_with_meta.append(item)
@@ -1495,6 +1582,7 @@ async def get_ui_state(request):
             "search_query": "",
             "search_scopes": ["current", "input", "output", "saved"],
             "filter_ratings": [],
+            "mask_filter": "",
             "recursive": False
         }
 

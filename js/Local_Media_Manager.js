@@ -162,6 +162,8 @@ function setupGlobalMaskEditor() {
         .lmm-mask-editor-actions { margin-top: 10px; display: flex; justify-content: flex-end; gap: 10px; }
         .lmm-mask-editor-btn-primary { background: #236694; color: white; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; }
         .lmm-mask-editor-btn-secondary { background: #444; color: white; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; }
+        .lmm-mask-editor-btn-danger { background: #8B2020; color: white; border: none; padding: 5px 15px; border-radius: 4px; cursor: pointer; display: none; }
+        .lmm-mask-editor-btn-danger:hover { background: #B22222; }
         .lmm-brush-cursor {
             position: absolute; border: 1px solid rgba(255, 255, 255, 0.9); box-shadow: 0 0 2px 1px rgba(0, 0, 0, 0.8); border-radius: 50%; pointer-events: none; z-index: 10003; transform: translate(-50%, -50%); display: none;
         }
@@ -201,6 +203,7 @@ function setupGlobalMaskEditor() {
                 
                 <div class="lmm-mask-editor-actions" style="flex-shrink:0;">
                     <div id="lmm-mask-info" style="position: absolute; bottom: 14px; left: 10px; color: #eee; background: rgba(0, 0, 0, 0.6); padding: 4px 8px; border-radius: 4px; font-size: 14px; pointer-events: none; user-select: none; z-index: 10002; font-family: monospace;">0 x 0 | 100%</div>
+                    <button id="lmm-mask-delete" class="lmm-mask-editor-btn-danger">Delete Mask</button>
                     <button id="lmm-mask-cancel" class="lmm-mask-editor-btn-secondary">Cancel</button>
                     <button id="lmm-mask-save" class="lmm-mask-editor-btn-primary">Save Mask</button>
                 </div>
@@ -316,6 +319,19 @@ function setupGlobalMaskEditor() {
         } catch (e) { alert("Failed: " + e); } finally { btn.textContent = "Save Mask"; btn.disabled = false; }
     };
 
+    const deleteBtn = document.getElementById("lmm-mask-delete");
+    deleteBtn.onclick = async () => {
+        if (!confirm("Permanently delete this mask sidecar file?")) return;
+        deleteBtn.textContent = "Deleting..."; deleteBtn.disabled = true;
+        try {
+            await api.fetchApi("/local_image_gallery/delete_mask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image_path: currentImagePath }) });
+            maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+            deleteBtn.style.display = "none";
+            if (lmm_mask_on_save_callback) lmm_mask_on_save_callback();
+            overlay.style.display = "none";
+        } catch (e) { alert("Failed to delete mask: " + e); } finally { deleteBtn.textContent = "Delete Mask"; deleteBtn.disabled = false; }
+    };
+
     document.getElementById("lmm-mask-clear").onclick = async () => {
         maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
     };
@@ -380,6 +396,7 @@ function setupGlobalMaskEditor() {
 
                 maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
 
+                deleteBtn.style.display = (data.status === 'ok' && data.mask_path) ? 'inline-block' : 'none';
                 if (data.status === 'ok' && data.mask_path) {
                     const mImg = new Image();
                     mImg.onload = () => {
@@ -572,6 +589,7 @@ app.registerExtension({
                             display: flex;
                             justify-content: space-between;
                             align-items: center;
+                            gap: 4px;
                             width: 100%;
                             margin-bottom: 4px;
                         }
@@ -589,12 +607,46 @@ app.registerExtension({
                         #${uniqueId} .lmm-workflow-text-badge:hover {
                             background-color: rgba(80,80,80,0.6);
                         }
-                        
-                        #${uniqueId} .edit-tags-btn, #${uniqueId} .open-media-btn, #${uniqueId} .copy-path-btn { position: absolute; bottom: 2px; width: 22px; height: 22px; background-color: rgba(0,0,0,0.5); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; transition: background-color 0.2s; opacity: 0; cursor: pointer; }
-                        #${uniqueId} .open-media-btn { right: 2px; }
-                        #${uniqueId} .edit-tags-btn { right: 28px; }
-                        #${uniqueId} .copy-path-btn { right: 54px; }
-                        #${uniqueId} .lmm-gallery-card:hover .edit-tags-btn, #${uniqueId} .lmm-gallery-card:hover .open-media-btn, #${uniqueId} .lmm-gallery-card:hover .copy-path-btn { opacity: 1; }
+                        #${uniqueId} .lmm-mask-badge {
+                            font-size: 10px;
+                            font-weight: bold;
+                            color: #B0E0FF;
+                            background-color: rgba(0,0,0,0.4);
+                            padding: 2px 5px;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            transition: background-color 0.2s;
+                        }
+                        #${uniqueId} .lmm-mask-badge:hover {
+                            background-color: rgba(80,80,80,0.6);
+                        }
+                        #${uniqueId} img.lmm-mask-overlay {
+                            position: absolute;
+                            top: 0; left: 0; width: 100%; height: 100%;
+                            opacity: 0;
+                            transition: opacity 0.2s;
+                            pointer-events: none;
+                            object-fit: cover;
+                            border-radius: 0;
+                        }
+                        #${uniqueId} .lmm-card-media-wrapper:hover .lmm-mask-overlay.loaded {
+                            opacity: 0.75;
+                        }
+                        #${uniqueId} .lmm-mask-filter-toggle {
+                            cursor: pointer;
+                            user-select: none;
+                            font-size: 14px;
+                            line-height: 1;
+                            transition: opacity 0.15s;
+                        }
+                        #${uniqueId} .lmm-mask-filter-toggle.inactive { opacity: 0.2; }
+                        #${uniqueId} .lmm-mask-filter-toggle.no-mask {
+                            filter: drop-shadow(0 0 4px #ff4444) drop-shadow(0 0 8px #ff2222);
+                        }
+
+                        #${uniqueId} .lmm-card-actions { display: flex; align-items: center; gap: 4px; width: 100%; }
+                        #${uniqueId} .lmm-card-actions-right { display: flex; gap: 2px; margin-left: auto; }
+                        #${uniqueId} .edit-tags-btn, #${uniqueId} .open-media-btn, #${uniqueId} .copy-path-btn { width: 22px; height: 22px; background-color: rgba(0,0,0,0.3); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; transition: background-color 0.2s; cursor: pointer; }
                         #${uniqueId} .edit-tags-btn:hover, #${uniqueId} .open-media-btn:hover, #${uniqueId} .copy-path-btn:hover { background-color: rgba(0,0,0,0.8); }
                         #${uniqueId} .lmm-star-rating { font-size: 16px; cursor: pointer; color: #555; }
                         #${uniqueId} .lmm-star-rating .lmm-star:hover { color: #FFD700 !important; }
@@ -756,6 +808,7 @@ app.registerExtension({
                                 </div>
                                 <div class="lmm-multiselect-rating-dropdown"></div>
                             </div>
+                            <span class="lmm-mask-filter-toggle inactive" title="No mask filter active. Click to cycle: mask only → no mask → off">🎭</span>
                             <div style="margin-left: auto; display: flex; align-items: center; gap: 5px;">
                                 <span class="lmm-type-icons"><span data-type="images" title="Show images">🖼️</span><span data-type="videos" title="Show videos">🎬</span><span data-type="audio" class="inactive" title="Show audio">🔊</span></span>
                                 <button class="lmm-recursive-btn inactive" title="Show items from all subdirectories recursively">📂 Recursive</button>
@@ -814,6 +867,8 @@ app.registerExtension({
                 const ratingDisplayText = ratingContainer.querySelector(".lmm-rating-display-text");
                 const ratingArrow = ratingContainer.querySelector(".lmm-multiselect-arrow");
                 const recursiveBtn = controls.querySelector(".lmm-recursive-btn");
+                const maskFilterToggle = controls.querySelector(".lmm-mask-filter-toggle");
+                let maskFilterState = ''; // '' = off, 'mask_only', 'no_mask'
                 const searchInput = controls.querySelector(".lmm-search-input");
                 const searchStatus = controls.querySelector(".lmm-search-status");
                 const searchScopeContainer = controls.querySelector(".lmm-search-scope-container");
@@ -1600,6 +1655,7 @@ app.registerExtension({
                             tooltip += `\nDuration: ${h > 0 ? `${h}:${String(m).padStart(2,'0')}` : String(m)}:${String(sec).padStart(2,'0')}`;
                         }
                     }
+                    if (item.has_mask) tooltip += `\nMask: yes`;
                     card.title = tooltip;
 
                     let mediaHTML = "";
@@ -1614,6 +1670,25 @@ app.registerExtension({
                     }
                     card.innerHTML = mediaHTML;
 
+                    if (item.mask_path) {
+                        const wrapper = card.querySelector('.lmm-card-media-wrapper');
+                        if (wrapper) {
+                            const maskImg = document.createElement('img');
+                            maskImg.className = 'lmm-mask-overlay';
+                            maskImg.loading = 'lazy';
+                            maskImg.alt = 'mask';
+                            // Defer src until first hover to avoid loading all masks upfront
+                            const maskSrc = `/local_image_gallery/view?filepath=${encodeURIComponent(item.mask_path)}`;
+                            wrapper.addEventListener('mouseenter', () => {
+                                if (!maskImg.src) {
+                                    maskImg.src = maskSrc;
+                                    maskImg.onload = () => maskImg.classList.add('loaded');
+                                }
+                            }, { once: true });
+                            wrapper.appendChild(maskImg);
+                        }
+                    }
+
                     if (item.type === 'image' || item.type === 'video') {
                         const infoPanel = document.createElement("div");
                         infoPanel.className = 'lmm-card-info-panel';
@@ -1621,16 +1696,22 @@ app.registerExtension({
                         const tags = item.tags.map(t => `<span class="lmm-tag" title="Click to filter by this tag">${t}</span>`).join('');
 
                         const workflowTextBadge = item.has_workflow ? `<div class="lmm-workflow-text-badge" title="Click to load workflow">Workflow</div>` : '';
+                        const maskBadge = item.has_mask ? `<div class="lmm-mask-badge" title="Click to open mask editor">🎭 Mask</div>` : '';
 
                         infoPanel.innerHTML = `
                             <div class="lmm-info-top-row">
                                 <div class="lmm-star-rating">${stars}</div>
                                 ${workflowTextBadge}
                             </div>
+                            <div class="lmm-card-actions">
+                                ${maskBadge}
+                                <div class="lmm-card-actions-right">
+                                    <div class="copy-path-btn" title="Copy file path">📁</div>
+                                    <div class="edit-tags-btn" title="Edit tags">✏️</div>
+                                    <div class="open-media-btn" title="Open in lightbox">🔎</div>
+                                </div>
+                            </div>
                             <div class="lmm-tag-list">${tags}</div>
-                            <div class="copy-path-btn" title="Copy file path">📁</div>
-                            <div class="open-media-btn" title="Open in lightbox">🔎</div>
-                            <div class="edit-tags-btn" title="Edit tags">✏️</div>
                         `;
                         card.appendChild(infoPanel);
 
@@ -1662,6 +1743,21 @@ app.registerExtension({
                                         alert("Failed to load workflow from media. See console for details.");
                                         workflowTextEl.style.backgroundColor = '#F44336';
                                         workflowTextEl.textContent = "Failed!";
+                                    }
+                                });
+                            }
+                        }
+
+                        if (item.has_mask && item.type === 'image') {
+                            const maskBadgeEl = card.querySelector(".lmm-mask-badge");
+                            if (maskBadgeEl) {
+                                maskBadgeEl.addEventListener("click", (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (window.lmmOpenMaskEditor) {
+                                        window.lmmOpenMaskEditor(item.path, () => {
+                                            saveStateAndReload(true);
+                                        });
                                     }
                                 });
                             }
@@ -1850,7 +1946,7 @@ app.registerExtension({
                     let url = `/local_image_gallery/images?directory=${encodeURIComponent(directory)}&page=${page}&sort_by=${sortBy}&sort_order=${sortOrder}&show_images=${showImages}&show_videos=${showVideos}&show_audio=${showAudio}&filter_tag=${encodeURIComponent(filterTag)}&search_mode=${searchMode}&filter_mode=${filterMode}&combine_mode=${combineMode}&force_refresh=${forceRefresh}&search_query=${encodeURIComponent(currentSearchQuery)}`;
                     currentSearchScopes.forEach(s => { url += `&search_scope=${encodeURIComponent(s)}`; });
                     const selectedRatings = Array.from(ratingDropdown.querySelectorAll('input[type="checkbox"]:not(.lmm-select-all):checked')).map(cb => cb.value);
-                    url += `&filter_ratings=${selectedRatings.join(',')}&recursive=${recursiveMode}`;
+                    url += `&filter_ratings=${selectedRatings.join(',')}&recursive=${recursiveMode}&mask_filter=${maskFilterState}`;
 
                     if (selection.length > 0) {
                         selection.forEach(item => { url += `&selected_paths=${encodeURIComponent(item.path)}`; });
@@ -2161,6 +2257,7 @@ app.registerExtension({
                         search_scopes: getSelectedScopes(),
                         show_selected_mode: showSelectedMode,
                         filter_ratings: Array.from(ratingDropdown.querySelectorAll('input[type="checkbox"]:not(.lmm-select-all):checked')).map(cb => parseInt(cb.value)),
+                        mask_filter: maskFilterState,
                         recursive: recursiveMode,
                         selection: selection,
                     };
@@ -2312,6 +2409,25 @@ app.registerExtension({
                 recursiveBtn.addEventListener('click', () => {
                     recursiveMode = !recursiveMode;
                     recursiveBtn.classList.toggle('inactive', !recursiveMode);
+                    saveStateAndReload(false);
+                });
+                const updateMaskFilterDisplay = () => {
+                    maskFilterToggle.classList.remove('inactive', 'no-mask');
+                    if (maskFilterState === '') {
+                        maskFilterToggle.classList.add('inactive');
+                        maskFilterToggle.title = 'No mask filter active. Click to cycle: mask only → no mask → off';
+                    } else if (maskFilterState === 'mask_only') {
+                        maskFilterToggle.title = 'Showing items with masks only. Click to cycle: no mask → off';
+                    } else if (maskFilterState === 'no_mask') {
+                        maskFilterToggle.classList.add('no-mask');
+                        maskFilterToggle.title = 'Showing items without masks only. Click to cycle: off';
+                    }
+                };
+                maskFilterToggle.addEventListener('click', () => {
+                    if (maskFilterState === '') maskFilterState = 'mask_only';
+                    else if (maskFilterState === 'mask_only') maskFilterState = 'no_mask';
+                    else maskFilterState = '';
+                    updateMaskFilterDisplay();
                     saveStateAndReload(false);
                 });
                 let searchDebounceTimer = null;
@@ -2637,6 +2753,8 @@ app.registerExtension({
                             }
                             recursiveMode = state.recursive || false;
                             recursiveBtn.classList.toggle('inactive', !recursiveMode);
+                            maskFilterState = state.mask_filter || '';
+                            updateMaskFilterDisplay();
 
                             if (state.filter_mode) {
                                 tagFilterModeBtn.textContent = state.filter_mode;
