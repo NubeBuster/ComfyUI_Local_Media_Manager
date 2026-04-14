@@ -38,17 +38,75 @@ def validate_path(path):
     return os.path.normpath(path)
 
 NODE_DIR = os.path.dirname(os.path.abspath(__file__))
-CONFIG_FILE = os.path.join(NODE_DIR, "config.json")
-METADATA_FILE = os.path.join(NODE_DIR, "metadata.json")
-UI_STATE_FILE = os.path.join(NODE_DIR, "lig_ui_state.json")
-CACHE_DIR = os.path.join(NODE_DIR, ".cache")
-THUMBNAIL_CACHE_DIR = os.path.join(CACHE_DIR, "thumbnails")
 
 SUPPORTED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp']
 SUPPORTED_VIDEO_EXTENSIONS = ['.mp4', '.webm', '.mov', '.mkv', '.avi']
 SUPPORTED_AUDIO_EXTENSIONS = ['.mp3', '.wav', '.ogg', '.flac', '.m4a']
 
-CACHE_LIFETIME = 1800
+
+def _get_data_dir():
+    """Return the canonical data directory for this node under ComfyUI's user dir."""
+    user_dir = folder_paths.get_user_directory()
+    data_dir = os.path.join(user_dir, "default", "local_media_manager")
+    os.makedirs(data_dir, exist_ok=True)
+    return data_dir
+
+
+def _migrate_data_files():
+    """One-time migration: move data files from NODE_DIR to the proper data dir.
+
+    Moves config.json, metadata.json, lig_ui_state.json.
+    If a file already exists at the destination, skip it and log a warning
+    (never overwrite — no data loss).
+    """
+    data_dir = _get_data_dir()
+    files_to_migrate = ['config.json', 'metadata.json', 'lig_ui_state.json']
+    migrated = []
+
+    for fname in files_to_migrate:
+        src = os.path.join(NODE_DIR, fname)
+        dst = os.path.join(data_dir, fname)
+        if not os.path.exists(src):
+            continue
+        if os.path.exists(dst):
+            logger.warning(f"LMM migration: skipping {fname} — already exists at {dst}")
+            continue
+        try:
+            shutil.move(src, dst)
+            migrated.append(fname)
+        except Exception as e:
+            logger.error(f"LMM migration: failed to move {fname}: {e}")
+
+    if migrated:
+        logger.info(f"LMM migration: moved {', '.join(migrated)} to {data_dir}")
+
+
+_migrate_data_files()
+
+DATA_DIR = _get_data_dir()
+CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+METADATA_FILE = os.path.join(DATA_DIR, "metadata.json")
+UI_STATE_FILE = os.path.join(DATA_DIR, "lig_ui_state.json")
+CACHE_DIR = os.path.join(os.environ.get('XDG_CACHE_HOME', os.path.expanduser('~/.cache')), 'local_media_manager')
+THUMBNAIL_CACHE_DIR = os.path.join(CACHE_DIR, "thumbnails")
+
+
+def _resolve_cache_ttl():
+    """Cache TTL in seconds. config.json > env LMM_CACHE_TTL > default 24h."""
+    try:
+        with open(CONFIG_FILE) as f:
+            cfg = json.load(f)
+        if 'cache_ttl' in cfg:
+            return int(cfg['cache_ttl'])
+    except Exception:
+        pass
+    env = os.environ.get('LMM_CACHE_TTL')
+    if env:
+        return int(env)
+    return 86400
+
+
+CACHE_LIFETIME = _resolve_cache_ttl()
 DIRSCAN_CACHE_DIR = os.path.join(CACHE_DIR, "dirscan")
 
 
@@ -123,17 +181,35 @@ def ensure_cache_dirs():
 
 ensure_cache_dirs()
 
+CONFIG_DEFAULTS = {
+    "saved_paths": [],
+    "cache_ttl": 86400,
+}
+
 def save_config(data):
     try:
         with open(CONFIG_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4)
     except Exception as e: print(f"LocalMediaManager: Error saving config: {e}")
 
 def load_config():
+    cfg = {}
     if os.path.exists(CONFIG_FILE):
         try:
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f: return json.load(f)
-        except: pass
-    return {}
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+        except Exception:
+            pass
+    changed = False
+    for key, default in CONFIG_DEFAULTS.items():
+        if key not in cfg:
+            cfg[key] = default
+            changed = True
+    if changed:
+        save_config(cfg)
+    return cfg
+
+# Seed default config keys on startup
+load_config()
 
 METADATA_CACHE = {'data': None, 'mtime': 0}
 
