@@ -1349,17 +1349,36 @@ app.registerExtension({
                     actualCardWidth = (containerWidth - totalGapSpace) / columnCount;
                     const columnHeights = new Array(columnCount).fill(0);
 
+                    // Measure info panel base height once (1 reflow), then estimate tag rows with math.
+                    // This avoids N reflows from the old measuringDiv-per-item approach.
                     const measuringDivId = `lmm-measuring-div-${uniqueId}`;
                     let measuringDiv = galleryContainer.querySelector(`#${measuringDivId}`);
                     if (!measuringDiv) {
                         measuringDiv = document.createElement("div");
                         measuringDiv.id = measuringDivId;
-                        measuringDiv.style.position = "absolute";
-                        measuringDiv.style.left = "-9999px";
-                        measuringDiv.style.visibility = "hidden";
-                        measuringDiv.style.pointerEvents = "none";
+                        measuringDiv.style.cssText = "position:absolute;left:-9999px;visibility:hidden;pointer-events:none";
                         galleryContainer.appendChild(measuringDiv);
                     }
+                    const sampleStars = Array.from({ length: 5 }, () => '<span class="lmm-star">☆</span>').join('');
+                    measuringDiv.innerHTML = `<div class="lmm-card-info-panel" style="width:${actualCardWidth}px">
+                        <div class="lmm-info-top-row"><div class="lmm-star-rating">${sampleStars}</div></div>
+                        <div class="lmm-card-actions"><div class="lmm-card-actions-right">
+                            <div class="copy-path-btn">📁</div><div class="edit-tags-btn">✏️</div><div class="open-media-btn">🔎</div>
+                        </div></div>
+                        <div class="lmm-tag-list"></div>
+                    </div>`;
+                    const INFO_PANEL_BASE = measuringDiv.querySelector('.lmm-card-info-panel').offsetHeight + 2;
+                    measuringDiv.innerHTML = "";
+                    const TAG_ROW_HEIGHT = 17; // 14px tag + 3px gap
+                    const AVG_TAG_WIDTH = 50;  // approximate px per tag (font-size 10px + padding)
+
+                    const estimateInfoPanelHeight = (item) => {
+                        if (!item.tags || item.tags.length === 0) return INFO_PANEL_BASE;
+                        const availableWidth = actualCardWidth - 4;
+                        const tagsPerRow = Math.max(1, Math.floor(availableWidth / AVG_TAG_WIDTH));
+                        const tagRows = Math.ceil(item.tags.length / tagsPerRow);
+                        return INFO_PANEL_BASE + tagRows * TAG_ROW_HEIGHT;
+                    };
 
                     layoutData = allItems.map((item, index) => {
                         let aspectRatio = item.aspectRatio || 1.0;
@@ -1369,31 +1388,13 @@ app.registerExtension({
                         }
 
                         const cardBorder = 6; // 3px border each side (box-sizing: border-box)
-                        let imagePartHeight = (actualCardWidth - cardBorder) / aspectRatio;
-
+                        let cardHeight;
 
                         if (item.type === 'image' || item.type === 'video') {
-                            imagePartHeight = Math.max(imagePartHeight, 100);
-
-                            const tags = item.tags.map(t => `<span class="lmm-tag" title="Click to filter by this tag">${t}</span>`).join('');
-                            const workflowTextBadge = item.has_workflow ? `<div class="lmm-workflow-text-badge">Workflow</div>` : '';
-                            const stars = Array.from({ length: 5 }, (_, i) => `<span class="lmm-star">☆</span>`).join('');
-
-                            const infoPanelHTML = `
-                                <div class="lmm-card-info-panel" style="width: ${actualCardWidth}px;">
-                                    <div class="lmm-info-top-row">
-                                        <div class="lmm-star-rating">${stars}</div>
-                                        ${workflowTextBadge}
-                                    </div>
-                                    <div class="lmm-tag-list">${tags}</div>
-                                </div>
-                            `;
-                            measuringDiv.innerHTML = infoPanelHTML;
-
-                            const infoPanelHeight = measuringDiv.querySelector('.lmm-card-info-panel').offsetHeight + 2;
-                            var cardHeight = imagePartHeight + infoPanelHeight + cardBorder;
+                            const imagePartHeight = Math.max((actualCardWidth - cardBorder) / aspectRatio, 100);
+                            cardHeight = imagePartHeight + estimateInfoPanelHeight(item) + cardBorder;
                         } else {
-                            var cardHeight = 150;
+                            cardHeight = 150;
                         }
 
                         const minHeight = Math.min(...columnHeights);
@@ -1410,8 +1411,6 @@ app.registerExtension({
                         columnHeights[columnIndex] += cardHeight + gap;
                         return position;
                     });
-
-                    measuringDiv.innerHTML = "";
 
                     const totalHeight = Math.max(...columnHeights);
                     cardholder.style.height = `${totalHeight}px`;
