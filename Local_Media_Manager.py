@@ -4,7 +4,7 @@ import os
 import json
 import torch
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageOps
 import urllib.parse
 import io
 from comfy.utils import common_upscale
@@ -476,6 +476,7 @@ class LocalMediaManagerNode:
                 if os.path.exists(media_path):
                     try:
                         with Image.open(media_path) as img:
+                            img = ImageOps.exif_transpose(img)
                             sizes[img.size] = sizes.get(img.size, 0) + 1
                             valid_image_paths.append(media_path)
                             if not batch_has_alpha and (img.mode == 'RGBA' or (img.mode == 'P' and 'transparency' in img.info)):
@@ -493,6 +494,7 @@ class LocalMediaManagerNode:
                 for media_path in valid_image_paths:
                     try:
                         with Image.open(media_path) as img:
+                            img = ImageOps.exif_transpose(img)
                             img_out = img.convert(target_mode)
 
                             if img.size[0] != target_width or img.size[1] != target_height:
@@ -787,6 +789,7 @@ class SelectOriginalImageNode:
 
         try:
             with Image.open(selected_path) as img:
+                img = ImageOps.exif_transpose(img)
                 H_orig, W_orig = img.height, img.width
 
                 img_out = img.convert("RGBA") if 'A' in img.getbands() else img.convert("RGB")
@@ -1706,6 +1709,7 @@ async def get_thumbnail(request):
                     video_cap.release()
         else:
             img = Image.open(filepath)
+            img = ImageOps.exif_transpose(img)
             img.thumbnail([320, 320], Image.LANCZOS)
             img.save(cache_path, "WEBP", quality=85)
 
