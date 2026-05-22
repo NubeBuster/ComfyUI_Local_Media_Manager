@@ -23,6 +23,18 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+try:
+    import av as _av
+    _AV_AVAILABLE = True
+except ImportError:
+    _av = None
+    _AV_AVAILABLE = False
+    logger.warning(
+        "ComfyUI_Local_Media_Manager: PyAV (`av`) not installed — falling back to "
+        "OpenCV. OpenCV cannot decode AV1 (and some other modern codecs). "
+        "Install `av` for full codec support: pip install av"
+    )
+
 VAE_STRIDE = (4, 8, 8)
 PATCH_SIZE = (1, 2, 2)
 
@@ -703,23 +715,19 @@ def get_audio(file_path, start_time=0, duration=0):
         print(f"LMM Selector: An unexpected error occurred during audio extraction: {e}")
         return {'waveform': torch.zeros(1, 2, 1), 'sample_rate': 44100}
 
-def cv_frame_generator(video_path, force_rate, frame_load_cap, skip_first_frames, select_every_nth):
+def _cv_frame_generator_cv2(video_path, force_rate, frame_load_cap, skip_first_frames, select_every_nth, fps, width, height, total_frames):
+    """Yield video frames via cv2.VideoCapture.
+
+    Expects the metadata dict to have already been yielded by the caller.
+    """
     video_cap = cv2.VideoCapture(video_path)
     if not video_cap.isOpened():
         raise IOError(f"Cannot open video file: {video_path}")
 
-    fps = video_cap.get(cv2.CAP_PROP_FPS)
-    width = int(video_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(video_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    total_frames = int(video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    duration = total_frames / fps if fps > 0 else 0
-
-    yield {"width": width, "height": height, "fps": fps, "total_frames": total_frames, "duration": duration}
-
     base_frame_time = 1.0 / fps if fps > 0 else 0
     target_frame_time = 1.0 / force_rate if force_rate > 0 else base_frame_time
     if target_frame_time <= 0:
-        target_frame_time = base_frame_time if base_frame_time > 0 else 1.0/30.0
+        target_frame_time = base_frame_time if base_frame_time > 0 else 1.0 / 30.0
 
     video_cap.set(cv2.CAP_PROP_POS_FRAMES, skip_first_frames)
 
@@ -727,36 +735,130 @@ def cv_frame_generator(video_path, force_rate, frame_load_cap, skip_first_frames
     frames_yielded = 0
     total_frames_evaluated = -1
 
-    while video_cap.isOpened():
-        current_pos_frames = skip_first_frames + frames_yielded
-        if total_frames > 0 and current_pos_frames >= total_frames:
-            break
+    try:
+        while video_cap.isOpened():
+            current_pos_frames = skip_first_frames + frames_yielded
+            if total_frames > 0 and current_pos_frames >= total_frames:
+                break
 
-        if force_rate > 0:
-            while time_offset < target_frame_time:
-                if not video_cap.grab():
-                    video_cap.release()
-                    return
+            if force_rate > 0:
+                while time_offset < target_frame_time:
+                    if not video_cap.grab():
+                        return
+                    time_offset += base_frame_time
+                time_offset -= target_frame_time
+                ret, frame = video_cap.retrieve()
+            else:
+                ret, frame = video_cap.read()
+
+            if not ret:
+                break
+
+            total_frames_evaluated += 1
+            if total_frames_evaluated % select_every_nth != 0:
+                continue
+
+            yield cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            frames_yielded += 1
+            if frame_load_cap > 0 and frames_yielded >= frame_load_cap:
+                break
+    finally:
+        video_cap.release()
+
+
+def _cv_frame_generator_av(video_path, force_rate, frame_load_cap, skip_first_frames, select_every_nth, fps, total_frames):
+    """Yield video frames via PyAV (primary backend).
+
+    Expects the metadata dict to have already been yielded by the caller.
+    Streams frames one at a time (O(1) memory) — never accumulates a list.
+    Applies skip_first_frames, select_every_nth, frame_load_cap, and
+    force_rate with the same semantics as the cv2 fallback.
+    """
+    container = None
+    try:
+        container = _av.open(video_path)
+        video_stream = container.streams.video[0]
+        video_stream.thread_type = "AUTO"
+
+        base_frame_time = 1.0 / fps if fps > 0 else 0.0
+        target_frame_time = 1.0 / force_rate if force_rate > 0 else base_frame_time
+        if target_frame_time <= 0:
+            target_frame_time = base_frame_time if base_frame_time > 0 else 1.0 / 30.0
+
+        frames_decoded = 0      # total decoded frames (includes skipped ones)
+        frames_yielded = 0
+        total_frames_evaluated = -1
+        time_offset = target_frame_time  # start ready to yield the first frame
+
+        for av_frame in container.decode(video=0):
+            if total_frames > 0 and frames_decoded >= total_frames:
+                break
+
+            frames_decoded += 1
+
+            # skip_first_frames: discard leading frames without evaluating them
+            if frames_decoded <= skip_first_frames:
+                continue
+
+            # force_rate: accumulate base-rate frames until the next target tick
+            if force_rate > 0:
                 time_offset += base_frame_time
-            time_offset -= target_frame_time
-            ret, frame = video_cap.retrieve()
-        else:
-             ret, frame = video_cap.read()
+                if time_offset < target_frame_time:
+                    continue
+                time_offset -= target_frame_time
 
-        if not ret:
-            break
+            total_frames_evaluated += 1
+            if total_frames_evaluated % select_every_nth != 0:
+                continue
 
-        total_frames_evaluated += 1
-        if total_frames_evaluated % select_every_nth != 0:
-            continue
+            yield av_frame.to_ndarray(format="rgb24")
 
-        yield cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frames_yielded += 1
+            if frame_load_cap > 0 and frames_yielded >= frame_load_cap:
+                break
+    finally:
+        if container is not None:
+            container.close()
 
-        frames_yielded += 1
-        if frame_load_cap > 0 and frames_yielded >= frame_load_cap:
-            break
 
-    video_cap.release()
+def cv_frame_generator(video_path, force_rate, frame_load_cap, skip_first_frames, select_every_nth):
+    """Generate video frames, yielding a metadata dict first then RGB uint8 ndarrays.
+
+    Uses PyAV as the primary backend (handles AV1 and all codecs that the
+    system libavcodec supports). Falls back to cv2.VideoCapture only when
+    PyAV is not installed.
+    """
+    meta = _ffprobe_video_metadata(video_path)
+    if meta is None:
+        raise IOError(f"Cannot read video metadata: {video_path}")
+
+    fps = meta.get("fps", 0.0)
+    width = meta.get("width", 0)
+    height = meta.get("height", 0)
+    total_frames = meta.get("total_frames", 0)
+    duration = meta.get("duration", total_frames / fps if fps > 0 else 0)
+
+    yield {"width": width, "height": height, "fps": fps, "total_frames": total_frames, "duration": duration}
+
+    if _AV_AVAILABLE:
+        yield from _cv_frame_generator_av(
+            video_path, force_rate, frame_load_cap, skip_first_frames,
+            select_every_nth, fps, total_frames,
+        )
+        return
+
+    try:
+        yield from _cv_frame_generator_cv2(
+            video_path, force_rate, frame_load_cap, skip_first_frames,
+            select_every_nth, fps, width, height, total_frames,
+        )
+    except Exception:
+        logger.error(
+            "OpenCV could not decode %s — likely an AV1/unsupported codec. "
+            "Install `av` (pip install av) for full codec support.", video_path,
+        )
+        raise
 
 class SelectOriginalImageNode:
     @classmethod
@@ -1071,27 +1173,94 @@ def _check_has_workflow(filepath, mtime, item_type):
         return has_wf
     return None
 
+def _ffprobe_video_metadata_av(full_path):
+    """Read video metadata via PyAV (primary backend)."""
+    container = None
+    try:
+        container = _av.open(full_path)
+        vs = container.streams.video[0]
+
+        info = {
+            'width': vs.width,
+            'height': vs.height,
+        }
+
+        # average_rate is the most reliable fps source; fall back to guessed_rate
+        rate = vs.average_rate or vs.guessed_rate
+        fps = float(rate) if rate else 0.0
+
+        if fps > 0:
+            info['fps'] = round(fps, 2)
+
+            # vs.frames may be 0 for some containers (e.g. mkv without index)
+            total = vs.frames or 0
+
+            # Container duration is in AV_TIME_BASE units (microseconds)
+            duration = 0.0
+            if container.duration is not None:
+                duration = float(container.duration) / 1_000_000.0
+            elif vs.duration is not None and vs.time_base is not None:
+                duration = float(vs.duration * vs.time_base)
+
+            if total > 0:
+                info['total_frames'] = total
+                info['duration'] = round(total / fps, 2)
+            elif duration > 0:
+                info['duration'] = round(duration, 2)
+                info['total_frames'] = int(round(duration * fps))
+
+        return info
+    except Exception as exc:
+        logger.warning("PyAV metadata read failed for %s: %s", full_path, exc)
+        return None
+    finally:
+        if container is not None:
+            container.close()
+
+
+def _ffprobe_video_metadata_cv2(full_path):
+    """Read video metadata via cv2.VideoCapture (fallback when ffprobe is absent)."""
+    cap = cv2.VideoCapture(full_path)
+    if not cap.isOpened():
+        return None
+    try:
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        info = {'width': w, 'height': h}
+        if fps and fps > 0:
+            info['fps'] = round(fps, 2)
+            if total > 0:
+                info['total_frames'] = total
+                info['duration'] = round(total / fps, 2)
+        return info
+    finally:
+        cap.release()
+
+
+def _ffprobe_video_metadata(full_path):
+    """Read video dimensions/fps/duration.
+
+    Tries PyAV first (handles AV1 and all codecs the system libavcodec supports).
+    Falls back to cv2.VideoCapture when PyAV is not installed.
+    """
+    if _AV_AVAILABLE:
+        return _ffprobe_video_metadata_av(full_path)
+    result = _ffprobe_video_metadata_cv2(full_path)
+    if result is None:
+        logger.error(
+            "OpenCV could not read metadata for %s — likely an AV1/unsupported "
+            "codec. Install `av` (pip install av) for full codec support.", full_path,
+        )
+    return result
+
+
 def _get_media_info(full_path, item_type):
     """Extract media metadata (dimensions, fps, duration) without decoding frames."""
     try:
         if item_type == 'video':
-            cap = cv2.VideoCapture(full_path)
-            if not cap.isOpened():
-                return None
-            try:
-                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                fps = cap.get(cv2.CAP_PROP_FPS)
-                total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                info = {'width': w, 'height': h}
-                if fps and fps > 0:
-                    info['fps'] = round(fps, 2)
-                    if total > 0:
-                        info['total_frames'] = total
-                        info['duration'] = round(total / fps, 2)
-                return info
-            finally:
-                cap.release()
+            return _ffprobe_video_metadata(full_path)
         elif item_type == 'image':
             with Image.open(full_path) as img:
                 w, h = img.size
@@ -1677,6 +1846,51 @@ def get_thumbnail_cache_path(filepath, is_video=False):
     filename = hashlib.md5(filepath.encode('utf-8')).hexdigest()
     return os.path.join(THUMBNAIL_CACHE_DIR, filename + ".webp")
 
+def _extract_video_frame_av(filepath):
+    """Decode the first video frame as a PIL image via PyAV (primary backend)."""
+    container = None
+    try:
+        container = _av.open(filepath)
+        for av_frame in container.decode(video=0):
+            return av_frame.to_image()
+        raise ValueError("No frames decoded from video")
+    finally:
+        if container is not None:
+            container.close()
+
+
+def _extract_video_frame_cv2(filepath):
+    """Decode the first video frame as a PIL image via cv2 (fallback when ffmpeg absent)."""
+    video_cap = cv2.VideoCapture(filepath)
+    if not video_cap.isOpened():
+        raise IOError("Cannot open video file")
+    try:
+        ret, frame = video_cap.read()
+        if not ret:
+            raise ValueError("Cannot read frame from video")
+        return Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+    finally:
+        if video_cap.isOpened():
+            video_cap.release()
+
+
+def _extract_video_frame(filepath):
+    """Decode the first frame of a video as a PIL image.
+
+    Tries PyAV first (handles AV1 and all codecs the system libavcodec supports).
+    Falls back to cv2.VideoCapture when PyAV is not installed.
+    """
+    if _AV_AVAILABLE:
+        return _extract_video_frame_av(filepath)
+    try:
+        return _extract_video_frame_cv2(filepath)
+    except Exception:
+        logger.error(
+            "OpenCV could not decode %s — likely an AV1/unsupported codec. "
+            "Install `av` (pip install av) for full codec support.", filepath,
+        )
+        raise
+
 @prompt_server.routes.get("/local_image_gallery/thumbnail")
 async def get_thumbnail(request):
     filepath = validate_path(urllib.parse.unquote(request.query.get('filepath', '')))
@@ -1693,20 +1907,9 @@ async def get_thumbnail(request):
 
     try:
         if is_video:
-            try:
-                video_cap = cv2.VideoCapture(filepath)
-                if not video_cap.isOpened():
-                    raise IOError("Cannot open video file")
-                ret, frame = video_cap.read()
-                if not ret:
-                    raise ValueError("Cannot read frame from video")
-
-                img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-                img.thumbnail([320, 320], Image.LANCZOS)
-                img.save(cache_path, "WEBP", quality=80)
-            finally:
-                if 'video_cap' in locals() and video_cap.isOpened():
-                    video_cap.release()
+            img = _extract_video_frame(filepath)
+            img.thumbnail([320, 320], Image.LANCZOS)
+            img.save(cache_path, "WEBP", quality=80)
         else:
             img = Image.open(filepath)
             img = ImageOps.exif_transpose(img)
